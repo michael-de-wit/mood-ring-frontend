@@ -21,7 +21,14 @@ function App() {
         setLoading(false);
       }
     };
+
     fetchData();
+
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 60000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   if (loading) return <div>Loading heart rate data...</div>;
