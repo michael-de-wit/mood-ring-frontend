@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { fetchHeartRateTimeSeries } from './services/get_hr_data'
+import React from 'react';
+import HeartRatePlot from './components/HeartRatePlot';
 
 function App() {
   const [heartRateTimeSeries, setHeartRateTimeSeries] = useState(null);
@@ -10,23 +12,24 @@ function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await fetchHeartRateTimeSeries();
-        setHeartRateTimeSeries(data);
-        console.log(data);
+        const response = await fetchHeartRateTimeSeries();
+        setHeartRateTimeSeries(response.data);
+        console.log('response.data', response.data);
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
-    
   }, []);
+
+  if (loading) return <div>Loading heart rate data...</div>;
+  if (error) return <div>Error: {error}</div>;
 
   return (
     <>
-
+      <HeartRatePlot heartRateTimeSeries={heartRateTimeSeries} />
     </>
   )
 }
