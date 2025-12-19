@@ -48,6 +48,10 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries }) =>
           y: heartRates,
           type: 'scatter',
           mode: 'lines',
+          line: {
+            shape: 'spline',
+            smoothing: 0.5
+          },
           marker: { color: 'red' },
         },
       ]}
