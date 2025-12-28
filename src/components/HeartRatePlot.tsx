@@ -9,9 +9,10 @@ interface HeartRateEntry {
 
 interface HeartRatePlotProps {
   heartRateTimeSeries: HeartRateEntry[] | null;
+  isConnected: boolean;
 }
 
-const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries }) => {
+const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
   console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
 
   const getHeartRatesToPlot = (heartRateData: HeartRateEntry[] | null, xCountToPlot: number) => {
@@ -50,7 +51,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries }) =>
           mode: 'lines',
           line: {
             shape: 'spline',
-            smoothing: 0.5
+            smoothing: 0.0
           },
           marker: { color: 'red' },
         },
