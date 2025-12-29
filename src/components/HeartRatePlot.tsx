@@ -19,38 +19,43 @@ interface HeartRatePlotProps {
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
   console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
 
-  const getHeartRatesToPlot = (heartRateData: HeartRateEntry[] | null, xCountToPlot: number) => {
-    if (!heartRateData || !Array.isArray(heartRateData)) return [];
-    const ObjectsToExtractValuesFrom = heartRateData.slice(-xCountToPlot);
-    const ValuesToPlot = ObjectsToExtractValuesFrom
-      .filter((entry) => entry.measurement_value !== null)
-      .map((entry) => {
-        const value = entry.measurement_value;
-        return typeof value === 'string' ? parseFloat(value) : Number(value);
-      });
-    return ValuesToPlot;
+  const getCleanedEntries = (data: HeartRateEntry[] | null, pointsToDisplay: number): HeartRateEntry[] => {
+    if (!data || !Array.isArray(data)) return [];
+
+    // Filter for entries that have BOTH valid timestamp AND valid measurement_value
+    return data
+      .filter((entry) => entry.timestamp !== null && entry.measurement_value !== null)
+      .slice(-pointsToDisplay);
   };
 
-  const getTimestampsToPlot = (heartRateData: HeartRateEntry[] | null, xCountToPlot: number) => {
-    if (!heartRateData || !Array.isArray(heartRateData)) return [];
-    const ObjectsToExtractValuesFrom = heartRateData.slice(-xCountToPlot);
-    const ValuesToPlot = ObjectsToExtractValuesFrom
-      .filter((entry) => entry.timestamp !== null)
-      .map((entry) => {
-        const date = new Date(entry.timestamp!); // Non-null assertion since we filtered
-        date.setHours(date.getHours() - 8); // Convert from UTC to PST
-        return date.toISOString().replace('Z', ''); // Remove the Z signifier for UTC
-      });
-    return ValuesToPlot;
+  const convertUtcToPst = (utcTimestamp: string): string => {
+    const date = new Date(utcTimestamp);
+    date.setHours(date.getHours() - 8); // Convert from UTC to PST (UTC-8)
+    return date.toISOString().replace('Z', ''); // Remove Z to indicate it's no longer UTC
   };
 
-  const xCountToPlot = 100
+  const extractHeartRateValues = (entries: HeartRateEntry[]): number[] => {
+    return entries.map((entry) => {
+      const value = entry.measurement_value;
+      return typeof value === 'string' ? parseFloat(value) : Number(value);
+    });
+  };
 
-  const heartRates = getHeartRatesToPlot(heartRateTimeSeries, xCountToPlot);
-  const timestamps = getTimestampsToPlot(heartRateTimeSeries, xCountToPlot);
+  const extractTimestamps = (entries: HeartRateEntry[]): string[] => {
+    return entries.map((entry) => convertUtcToPst(entry.timestamp!));
+  };
 
-  console.log('Heart rates:', heartRates);
-  console.log('Timestamps:', timestamps);
+  const pointsToDisplay = 100;
+
+  const cleanedEntries = getCleanedEntries(heartRateTimeSeries, pointsToDisplay);
+  console.log('cleanedEntries',cleanedEntries);
+  const heartRates = extractHeartRateValues(cleanedEntries);
+  const timestamps = extractTimestamps(cleanedEntries);
+
+  console.log('heartRates',heartRates);
+  console.log('timestamps',timestamps);
+  console.log('Heart rates to plot:', heartRates.length, 'values');
+  console.log('Timestamps to plot:', timestamps.length, 'values');
 
   return (
     <Plot
@@ -67,7 +72,11 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
           marker: { color: 'red' },
         },
       ]}
-      layout={{ width: 1200, height: 600, title: { text: 'Heart Rate' } }}
+      layout={{
+        width: 1200,
+        height: 600,
+        title: { text: 'Heart Rate' }
+      }}
     />
   );
 };
