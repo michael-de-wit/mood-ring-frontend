@@ -8,9 +8,9 @@ interface HeartRateEntry {
 
 export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngrok-free.dev/ws/heartrate') => {
   const [heartRateTimeSeries, setHeartRateTimeSeries] = useState<HeartRateEntry[] | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false); // Websocket connection
   const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null); // Websocket connection persists across re-renders
   const reconnectTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngro
                 console.error('Error fetching updated data:', err);
                 setError('Failed to fetch updated heart rate data');
               }
-            } else if (data.data) {
+            } else if (data.data) { // Currently only sends a notification 'data.type'; not the actual data
               // Direct data payload
               setHeartRateTimeSeries(data.data);
             } else if (Array.isArray(data)) {
