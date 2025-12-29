@@ -19,12 +19,16 @@ interface HeartRatePlotProps {
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
   console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
 
-  const getCleanedEntries = (data: HeartRateEntry[] | null, pointsToDisplay: number): HeartRateEntry[] => {
+  const getNonNullEntries = (data: HeartRateEntry[] | null): HeartRateEntry[] => {
     if (!data || !Array.isArray(data)) return [];
 
     // Filter for entries that have BOTH valid timestamp AND valid measurement_value
-    return data
-      .filter((entry) => entry.timestamp !== null && entry.measurement_value !== null)
+    return data.filter((entry) => entry.timestamp !== null && entry.measurement_value !== null);
+  };
+
+  const getRecentHREntries = (entries: HeartRateEntry[], pointsToDisplay: number): HeartRateEntry[] => {
+    return entries
+      .filter((entry) => entry.measurement_type === 'heartrate')
       .slice(-pointsToDisplay);
   };
 
@@ -47,10 +51,11 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
 
   const pointsToDisplay = 100;
 
-  const cleanedEntries = getCleanedEntries(heartRateTimeSeries, pointsToDisplay);
-  console.log('cleanedEntries',cleanedEntries);
-  const heartRates = extractHeartRateValues(cleanedEntries);
-  const timestamps = extractTimestamps(cleanedEntries);
+  const nonNullEntries = getNonNullEntries(heartRateTimeSeries);
+  const recentHREntries = getRecentHREntries(nonNullEntries, pointsToDisplay);
+  console.log('recentHREntries', recentHREntries);
+  const heartRates = extractHeartRateValues(recentHREntries);
+  const timestamps = extractTimestamps(recentHREntries);
 
   console.log('heartRates',heartRates);
   console.log('timestamps',timestamps);
