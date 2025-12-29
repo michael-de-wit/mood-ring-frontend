@@ -1,9 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 
 interface HeartRateEntry {
-  timestamp: string;
-  bpm: number;
-  source: string;
+  timestamp: string | null;
+  measurement_type: string | null;
+  measurement_value: number | string | null;
+  measurement_unit: string | null;
+  sensor_mode: string | null;
+  data_source: string | null;
+  device_source: string | null;
 }
 
 export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngrok-free.dev/ws/heartrate') => {
@@ -32,6 +36,7 @@ export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngro
               headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             const jsonData = await response.json();
+            console.log("jsonData", {jsonData});            
             console.log('Initial data fetched:', jsonData.data?.length, 'records');
             setHeartRateTimeSeries(jsonData.data);
           } catch (err) {
