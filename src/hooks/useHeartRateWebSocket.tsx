@@ -10,7 +10,7 @@ interface HeartRateEntry {
   device_source: string | null;
 }
 
-export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngrok-free.dev/ws/heartrate') => {
+export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-free.dev/ws/ouratimeseries') => {
   const [heartRateTimeSeries, setHeartRateTimeSeries] = useState<HeartRateEntry[] | null>(null);
   const [isConnected, setIsConnected] = useState(false); // Websocket connection
   const [error, setError] = useState<string | null>(null);
@@ -31,17 +31,17 @@ export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngro
 
           // Fetch initial data immediately on connect
           try {
-            console.log('Fetching initial heart rate data...');
-            const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/heartratetimeseries/live', {
+            console.log('Fetching initial biosensor data...');
+            const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live', {
               headers: { 'ngrok-skip-browser-warning': 'true' }
             });
             const jsonData = await response.json();
-            console.log("jsonData", {jsonData});            
+            console.log("jsonData", {jsonData});
             console.log('Initial data fetched:', jsonData.data?.length, 'records');
             setHeartRateTimeSeries(jsonData.data);
           } catch (err) {
             console.error('Error fetching initial data:', err);
-            setError('Failed to fetch initial heart rate data');
+            setError('Failed to fetch initial biosensor data');
           }
         };
 
@@ -51,11 +51,11 @@ export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngro
             console.log('WebSocket received:', data);
 
             // Handle different message types
-            if (data.type === 'heartrate_update') {
+            if (data.type === 'ouratimeseries_update' || data.type === 'heartrate_update') {
               // Fetch the latest data from the REST endpoint when notified
-              console.log('Heart rate update notification received, fetching latest data...');
+              console.log('Biosensor data update notification received, fetching latest data...');
               try {
-                const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/heartratetimeseries/live', {
+                const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live', {
                   headers: { 'ngrok-skip-browser-warning': 'true' }
                 });
                 const jsonData = await response.json();
@@ -63,13 +63,16 @@ export const useHeartRateWebSocket = (url = 'https://keith-sorbic-huggingly.ngro
                 setHeartRateTimeSeries(jsonData.data);
               } catch (err) {
                 console.error('Error fetching updated data:', err);
-                setError('Failed to fetch updated heart rate data');
+                setError('Failed to fetch updated biosensor data');
               }
-            } else if (data.data) { // Currently only sends a notification 'data.type'; not the actual data
+            } else if (data.type === 'pong') {
+              // Echo/pong message from server - connection is alive
+              console.log('Received pong from server:', data.message);
+            } else if (data.data) {
               // Direct data payload
               setHeartRateTimeSeries(data.data);
             } else if (Array.isArray(data)) {
-              // Direct array of heart rate entries
+              // Direct array of biosensor entries
               setHeartRateTimeSeries(data);
             }
           } catch (err) {
