@@ -17,32 +17,52 @@ interface HeartRatePlotProps {
 }
 
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
+  console.log('=== HeartRatePlot Debug ===');
   console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
+  console.log('Is array?', Array.isArray(heartRateTimeSeries));
+  console.log('Length:', heartRateTimeSeries?.length);
+
+  if (heartRateTimeSeries && heartRateTimeSeries.length > 0) {
+    console.log('First entry:', heartRateTimeSeries[0]);
+    console.log('Last entry:', heartRateTimeSeries[heartRateTimeSeries.length - 1]);
+  }
 
   const getNonNullEntries = (data: HeartRateEntry[] | null): HeartRateEntry[] => {
-    if (!data || !Array.isArray(data)) return [];
-    return data.filter((entry) => entry.timestamp !== null && entry.measurement_value !== null);
+    if (!data || !Array.isArray(data)) {
+      console.log('getNonNullEntries: No data or not an array');
+      return [];
+    }
+    const filtered = data.filter((entry) => entry.timestamp !== null && entry.measurement_value !== null);
+    console.log(`getNonNullEntries: Filtered ${data.length} -> ${filtered.length} entries`);
+    return filtered;
   };
 
   const filterByDateRange = (entries: HeartRateEntry[], startDate: string, endDate: string): HeartRateEntry[] => {
     const start = new Date(startDate);
     const end = new Date(endDate);
-    return entries.filter((entry) => {
+
+    const filtered = entries.filter((entry) => {
       const entryDate = new Date(entry.timestamp!);
-      return entryDate >= start && entryDate <= end;
+      const inRange = entryDate >= start && entryDate <= end;
+      return inRange;
     });
+
+    // Debug: show what got filtered
+    if (entries.length > 0) {
+      console.log('Date filter - Start:', start.toISOString());
+      console.log('Date filter - End:', end.toISOString());
+      console.log('Sample entry dates (first 3):');
+      entries.slice(0, 3).forEach((entry, i) => {
+        const entryDate = new Date(entry.timestamp!);
+        console.log(`  ${i}: ${entry.timestamp} -> ${entryDate.toISOString()}`);
+      });
+    }
+
+    return filtered;
   };
 
   const filterByMeasurementType = (entries: HeartRateEntry[], measurementType: string): HeartRateEntry[] => {
     return entries.filter((entry) => entry.measurement_type === measurementType);
-  };
-
-  const filterBySensorMode = (entries: HeartRateEntry[], sensorMode: string): HeartRateEntry[] => {
-    return entries.filter((entry) => entry.sensor_mode === sensorMode);
-  };
-
-  const filterBySensorModeNot = (entries: HeartRateEntry[], excludeSensorMode: string): HeartRateEntry[] => {
-    return entries.filter((entry) => entry.sensor_mode !== excludeSensorMode);
   };
 
   const convertUtcToPst = (utcTimestamp: string): string => {
@@ -62,12 +82,19 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     return entries.map((entry) => convertUtcToPst(entry.timestamp!));
   };
 
-  // Date range: Dec 29, 2025, 6-hour window (adjust as needed)
-  const startDate = '2025-12-29T10:00:00Z';
-  const endDate = '2025-12-30T01:00:00Z';
-
+  // Data is already filtered to last 24 hours by the API
   const nonNullEntries = getNonNullEntries(heartRateTimeSeries);
-  const dateFilteredEntries = filterByDateRange(nonNullEntries, startDate, endDate);
+
+  console.log('Total non-null entries:', nonNullEntries.length);
+
+  // Log first few timestamps to see format
+  if (nonNullEntries.length > 0) {
+    console.log('First 5 timestamps:', nonNullEntries.slice(0, 5).map(e => e.timestamp));
+    console.log('Last 5 timestamps:', nonNullEntries.slice(-5).map(e => e.timestamp));
+  }
+
+  // Use all entries (already filtered to 24 hours by API)
+  const dateFilteredEntries = nonNullEntries;
 
   console.log('Total entries in date range:', dateFilteredEntries.length);
   console.log('Unique measurement types:', [...new Set(dateFilteredEntries.map(e => e.measurement_type))]);
@@ -78,23 +105,37 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   console.log('Total heartrate entries:', allHREntries.length);
   console.log('Sample heartrate entry:', allHREntries[0]);
 
-  // Split data into three series
-  const hrNonSessionEntries = filterBySensorModeNot(
-    filterByMeasurementType(dateFilteredEntries, 'heartrate'),
-    'session'
-  );
-  const hrSessionEntries = filterBySensorMode(
-    filterByMeasurementType(dateFilteredEntries, 'heartrate'),
-    'session'
-  );
-  const hrvEntries = filterByMeasurementType(dateFilteredEntries, 'heart_rate_variability');
+  // Split data into four series
+  // Backend-v2 measurement types:
+  // - 'heartrate' (from /heartrate endpoint, sensor_mode varies)
+  // - 'heartrate_session' (from /session endpoint)
+  // - 'hrv' (heart rate variability from /session endpoint)
+  // - 'motion_count' (motion data from /session endpoint)
 
-  console.log('HR (non-session):', hrNonSessionEntries.length, 'values');
+  const hrNonSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate');
+  const hrSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate_session');
+  const hrvEntries = filterByMeasurementType(dateFilteredEntries, 'hrv');
+  const motionEntries = filterByMeasurementType(dateFilteredEntries, 'motion_count');
+
+  console.log('HR (non-session/heartrate):', hrNonSessionEntries.length, 'values');
   console.log('Sample non-session entry:', hrNonSessionEntries[0]);
-  console.log('HR (session):', hrSessionEntries.length, 'values');
+  console.log('HR (session/heartrate_session):', hrSessionEntries.length, 'values');
   console.log('Sample session entry:', hrSessionEntries[0]);
   console.log('HRV:', hrvEntries.length, 'values');
   console.log('Sample HRV entry:', hrvEntries[0]);
+  console.log('Motion Count:', motionEntries.length, 'values');
+  console.log('Sample motion entry:', motionEntries[0]);
+
+  // If no data at all, show a message
+  if (!heartRateTimeSeries || heartRateTimeSeries.length === 0) {
+    return (
+      <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
+        <h3>No Data Available</h3>
+        <p>Waiting for biosensor data from backend-v2...</p>
+        <p>WebSocket Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+      </div>
+    );
+  }
 
   return (
     <Plot
@@ -135,11 +176,23 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
             color: 'blue'
           },
         },
+        {
+          x: extractTimestamps(motionEntries),
+          y: extractHeartRateValues(motionEntries),
+          type: 'scatter',
+          mode: 'lines',
+          name: 'Motion Count',
+          line: {
+            shape: 'spline',
+            smoothing: 0.0,
+            color: 'green'
+          },
+        },
       ]}
       layout={{
         width: 1200,
         height: 600,
-        title: { text: 'Biosensor Data - Dec 29, 2025 (6-hour window)' },
+        title: { text: 'Biosensor Data - Last 24 Hours (Backend-v2)' },
         xaxis: { title: 'Time (PST)' },
         yaxis: { title: 'Value' },
         showlegend: true,

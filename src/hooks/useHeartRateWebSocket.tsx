@@ -17,6 +17,43 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
   const wsRef = useRef<WebSocket | null>(null); // Websocket connection persists across re-renders
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  // Helper function to get last 24 hours datetime range
+  const getLast24HoursRange = () => {
+    const endDateTime = new Date();
+    const startDateTime = new Date(endDateTime.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+    return {
+      start: startDateTime.toISOString(),
+      end: endDateTime.toISOString()
+    };
+  };
+
+  // Helper function to fetch biosensor data with datetime parameters
+  const fetchBiosensorData = async () => {
+    const { start, end } = getLast24HoursRange();
+    const apiUrl = `https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live?start_datetime=${start}&end_datetime=${end}`;
+
+    console.log('=== Fetching Biosensor Data ===');
+    console.log('Start datetime:', start);
+    console.log('End datetime:', end);
+    console.log('Full API URL:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    });
+
+    const jsonData = await response.json();
+    console.log('Response data:', jsonData);
+    console.log('Data fetched:', jsonData.data?.length, 'records');
+
+    if (jsonData.data && jsonData.data.length > 0) {
+      console.log('First timestamp in response:', jsonData.data[0].timestamp);
+      console.log('Last timestamp in response:', jsonData.data[jsonData.data.length - 1].timestamp);
+    }
+
+    return jsonData.data;
+  };
+
   useEffect(() => {
     const connect = () => {
       try {
@@ -31,14 +68,9 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
 
           // Fetch initial data immediately on connect
           try {
-            console.log('Fetching initial biosensor data...');
-            const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live', {
-              headers: { 'ngrok-skip-browser-warning': 'true' }
-            });
-            const jsonData = await response.json();
-            console.log("jsonData", {jsonData});
-            console.log('Initial data fetched:', jsonData.data?.length, 'records');
-            setHeartRateTimeSeries(jsonData.data);
+            console.log('Fetching initial biosensor data (last 24 hours)...');
+            const data = await fetchBiosensorData();
+            setHeartRateTimeSeries(data);
           } catch (err) {
             console.error('Error fetching initial data:', err);
             setError('Failed to fetch initial biosensor data');
@@ -50,17 +82,14 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
             const data = JSON.parse(event.data);
             console.log('WebSocket received:', data);
 
-            // Handle different message types
-            if (data.type === 'ouratimeseries_update' || data.type === 'heartrate_update') {
-              // Fetch the latest data from the REST endpoint when notified
-              console.log('Biosensor data update notification received, fetching latest data...');
+            // Handle different message types from backend-v2
+            if (data.type === 'heartrate_update' || data.type === 'session_update') {
+              // Backend-v2 sends heartrate_update and session_update notifications
+              console.log(`${data.type} notification received:`, data.message);
+              console.log('Fetching latest biosensor data (last 24 hours)...');
               try {
-                const response = await fetch('https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live', {
-                  headers: { 'ngrok-skip-browser-warning': 'true' }
-                });
-                const jsonData = await response.json();
-                console.log('Updated data fetched:', jsonData.data?.length, 'records');
-                setHeartRateTimeSeries(jsonData.data);
+                const latestData = await fetchBiosensorData();
+                setHeartRateTimeSeries(latestData);
               } catch (err) {
                 console.error('Error fetching updated data:', err);
                 setError('Failed to fetch updated biosensor data');
