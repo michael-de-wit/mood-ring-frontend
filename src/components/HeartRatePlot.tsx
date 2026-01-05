@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
 
 interface HeartRateEntry {
@@ -16,7 +16,96 @@ interface HeartRatePlotProps {
   isConnected: boolean;
 }
 
+type DataSeries = 'hr_non_session' | 'hr_session' | 'hrv' | 'motion_count';
+
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
+  // State to track which data series are selected
+  const [selectedSeries, setSelectedSeries] = useState<DataSeries[]>([
+    'hr_non_session',
+    'hr_session',
+    'hrv',
+    'motion_count'
+  ]);
+
+  // State for datetime range controls
+  const [customData, setCustomData] = useState<HeartRateEntry[] | null>(null);
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [startDatetime, setStartDatetime] = useState(() => {
+    const date = new Date();
+    date.setHours(date.getHours() - 24);
+    return date.toISOString().slice(0, 16); // Format for datetime-local input
+  });
+  const [endDatetime, setEndDatetime] = useState(() => {
+    return new Date().toISOString().slice(0, 16);
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const toggleSeries = (series: DataSeries) => {
+    setSelectedSeries(prev =>
+      prev.includes(series)
+        ? prev.filter(s => s !== series)
+        : [...prev, series]
+    );
+  };
+
+  const fetchCustomRange = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+
+    try {
+      const start = new Date(startDatetime).toISOString();
+      const end = isLiveMode ? new Date().toISOString() : new Date(endDatetime).toISOString();
+
+      const apiUrl = `https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live?start_datetime=${start}&end_datetime=${end}`;
+
+      console.log('Fetching custom range:', start, 'to', end);
+
+      const response = await fetch(apiUrl, {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
+
+      const jsonData = await response.json();
+
+      // Check if we hit the API limit (assuming backend returns max 1000 records)
+      if (jsonData.data && jsonData.data.length >= 1000) {
+        alert('⚠️ API Record Limit Reached!\n\nThe query returned 1000 records (the maximum). There may be more data available. Try narrowing your date range to see all data.');
+      }
+
+      setCustomData(jsonData.data);
+      console.log('Custom data fetched:', jsonData.data?.length, 'records');
+    } catch (err) {
+      console.error('Error fetching custom range:', err);
+      setFetchError('Failed to fetch custom date range data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resetToLive = () => {
+    setCustomData(null);
+    setIsLiveMode(true);
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    setStartDatetime(yesterday.toISOString().slice(0, 16));
+    setEndDatetime(now.toISOString().slice(0, 16));
+  };
+
+  // Auto-refresh custom range when WebSocket sends new data in Live mode
+  const previousWebSocketDataRef = useRef<HeartRateEntry[] | null>(null);
+
+  useEffect(() => {
+    // Check if WebSocket data actually changed (not just initial render)
+    const webSocketDataChanged = previousWebSocketDataRef.current !== heartRateTimeSeries;
+    previousWebSocketDataRef.current = heartRateTimeSeries;
+
+    // If we're viewing custom data AND in Live mode AND WebSocket data updated
+    if (customData && isLiveMode && webSocketDataChanged && heartRateTimeSeries) {
+      console.log('WebSocket notification received in Live mode - auto-refreshing custom range...');
+      fetchCustomRange();
+    }
+  }, [heartRateTimeSeries]); // Trigger when WebSocket data changes
+
   console.log('=== HeartRatePlot Debug ===');
   console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
   console.log('Is array?', Array.isArray(heartRateTimeSeries));
@@ -82,8 +171,9 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     return entries.map((entry) => convertUtcToPst(entry.timestamp!));
   };
 
-  // Data is already filtered to last 24 hours by the API
-  const nonNullEntries = getNonNullEntries(heartRateTimeSeries);
+  // Use custom data if available, otherwise use live WebSocket data
+  const dataToUse = customData || heartRateTimeSeries;
+  const nonNullEntries = getNonNullEntries(dataToUse);
 
   console.log('Total non-null entries:', nonNullEntries.length);
 
@@ -137,72 +227,213 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     );
   }
 
+  // Build data array based on selected series
+  const plotData = [];
+
+  if (selectedSeries.includes('hr_non_session')) {
+    plotData.push({
+      x: extractTimestamps(hrNonSessionEntries),
+      y: extractHeartRateValues(hrNonSessionEntries),
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Heart Rate (Non-Session)',
+      line: {
+        shape: 'spline' as const,
+        smoothing: 0.0,
+        color: 'red'
+      },
+    });
+  }
+
+  if (selectedSeries.includes('hr_session')) {
+    plotData.push({
+      x: extractTimestamps(hrSessionEntries),
+      y: extractHeartRateValues(hrSessionEntries),
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Heart Rate (Session)',
+      line: {
+        shape: 'spline' as const,
+        smoothing: 0.0,
+        color: 'orange'
+      },
+    });
+  }
+
+  if (selectedSeries.includes('hrv')) {
+    plotData.push({
+      x: extractTimestamps(hrvEntries),
+      y: extractHeartRateValues(hrvEntries),
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Heart Rate Variability',
+      line: {
+        shape: 'spline' as const,
+        smoothing: 0.0,
+        color: 'blue'
+      },
+    });
+  }
+
+  if (selectedSeries.includes('motion_count')) {
+    plotData.push({
+      x: extractTimestamps(motionEntries),
+      y: extractHeartRateValues(motionEntries),
+      type: 'scatter' as const,
+      mode: 'lines' as const,
+      name: 'Motion Count',
+      line: {
+        shape: 'spline' as const,
+        smoothing: 0.0,
+        color: 'green'
+      },
+    });
+  }
+
   return (
-    <Plot
-      data={[
-        {
-          x: extractTimestamps(hrNonSessionEntries),
-          y: extractHeartRateValues(hrNonSessionEntries),
-          type: 'scatter',
-          mode: 'lines',
-          name: 'Heart Rate (non-session)',
-          line: {
-            shape: 'spline',
-            smoothing: 0.0,
-            color: 'red'
-          },
-        },
-        {
-          x: extractTimestamps(hrSessionEntries),
-          y: extractHeartRateValues(hrSessionEntries),
-          type: 'scatter',
-          mode: 'lines',
-          name: 'Heart Rate (session)',
-          line: {
-            shape: 'spline',
-            smoothing: 0.0,
-            color: 'orange'
-          },
-        },
-        {
-          x: extractTimestamps(hrvEntries),
-          y: extractHeartRateValues(hrvEntries),
-          type: 'scatter',
-          mode: 'lines',
-          name: 'Heart Rate Variability',
-          line: {
-            shape: 'spline',
-            smoothing: 0.0,
-            color: 'blue'
-          },
-        },
-        {
-          x: extractTimestamps(motionEntries),
-          y: extractHeartRateValues(motionEntries),
-          type: 'scatter',
-          mode: 'lines',
-          name: 'Motion Count',
-          line: {
-            shape: 'spline',
-            smoothing: 0.0,
-            color: 'green'
-          },
-        },
-      ]}
-      layout={{
-        width: 1200,
-        height: 600,
-        title: { text: 'Biosensor Data - Last 24 Hours (Backend-v2)' },
-        xaxis: { title: 'Time (PST)' },
-        yaxis: { title: 'Value' },
-        showlegend: true,
-        legend: {
-          x: 1,
-          xanchor: 'right',
-          y: 1
-        }
-      }}
-    />
+    <div>
+      {/* Datetime Range Controls */}
+      <div style={{
+        padding: '15px',
+        backgroundColor: '#e8f4f8',
+        border: '1px solid #b3d9e6',
+        borderRadius: '5px',
+        marginBottom: '10px'
+      }}>
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Date Range:</strong> {customData ? '📅 Custom Range' : '🔴 Live (Last 24 Hours)'}
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            <strong>Start:</strong>
+            <input
+              type="datetime-local"
+              value={startDatetime}
+              onChange={(e) => setStartDatetime(e.target.value)}
+              style={{ marginLeft: '5px', padding: '5px' }}
+            />
+          </label>
+          <label>
+            <strong>End:</strong>
+            <input
+              type="datetime-local"
+              value={endDatetime}
+              onChange={(e) => setEndDatetime(e.target.value)}
+              disabled={isLiveMode}
+              style={{ marginLeft: '5px', padding: '5px' }}
+            />
+          </label>
+          <label style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={isLiveMode}
+              onChange={(e) => setIsLiveMode(e.target.checked)}
+              style={{ marginRight: '5px' }}
+            />
+            Live (Now)
+          </label>
+          <button
+            onClick={fetchCustomRange}
+            disabled={isLoading}
+            style={{
+              padding: '5px 15px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: isLoading ? 'wait' : 'pointer'
+            }}
+          >
+            {isLoading ? 'Loading...' : 'Fetch Range'}
+          </button>
+          {customData && (
+            <button
+              onClick={resetToLive}
+              style={{
+                padding: '5px 15px',
+                backgroundColor: '#f44336',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer'
+              }}
+            >
+              Reset to Live
+            </button>
+          )}
+        </div>
+        {fetchError && (
+          <div style={{ color: 'red', marginTop: '10px' }}>
+            ⚠️ {fetchError}
+          </div>
+        )}
+      </div>
+
+      {/* Data Series Selection Controls */}
+      <div style={{
+        padding: '15px',
+        backgroundColor: '#f9f9f9',
+        border: '1px solid #ddd',
+        borderRadius: '5px',
+        marginBottom: '15px'
+      }}>
+        <strong style={{ marginRight: '15px' }}>Select Data to Display:</strong>
+        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={selectedSeries.includes('hr_non_session')}
+            onChange={() => toggleSeries('hr_non_session')}
+            style={{ marginRight: '5px' }}
+          />
+          <span style={{ color: 'red' }}>●</span> Heart Rate (Non-Session)
+        </label>
+        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={selectedSeries.includes('hr_session')}
+            onChange={() => toggleSeries('hr_session')}
+            style={{ marginRight: '5px' }}
+          />
+          <span style={{ color: 'orange' }}>●</span> Heart Rate (Session)
+        </label>
+        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={selectedSeries.includes('hrv')}
+            onChange={() => toggleSeries('hrv')}
+            style={{ marginRight: '5px' }}
+          />
+          <span style={{ color: 'blue' }}>●</span> HRV
+        </label>
+        <label style={{ cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={selectedSeries.includes('motion_count')}
+            onChange={() => toggleSeries('motion_count')}
+            style={{ marginRight: '5px' }}
+          />
+          <span style={{ color: 'green' }}>●</span> Motion Count
+        </label>
+      </div>
+
+      {/* Plot */}
+      <Plot
+        data={plotData}
+        layout={{
+          width: 1200,
+          height: 600,
+          title: { text: 'Biosensor Data - Last 24 Hours (Backend-v2)' },
+          xaxis: { title: 'Time (PST)' },
+          yaxis: { title: 'Value' },
+          showlegend: true,
+          legend: {
+            x: 1,
+            xanchor: 'right',
+            y: 1
+          }
+        }}
+      />
+    </div>
   );
 };
 
