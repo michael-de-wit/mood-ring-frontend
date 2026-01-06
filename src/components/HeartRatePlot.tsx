@@ -100,7 +100,13 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     }
   };
 
-  // Auto-refresh custom range when WebSocket sends new data in Live mode
+  // Auto-fetch data when inputs change
+  useEffect(() => {
+    // Fetch custom range whenever start/end datetime or live mode changes
+    fetchCustomRange();
+  }, [startDatetime, endDatetime, isLiveMode]);
+
+  // Auto-refresh when WebSocket sends new data in Live mode
   const previousWebSocketDataRef = useRef<HeartRateEntry[] | null>(null);
 
   useEffect(() => {
@@ -108,9 +114,8 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     const webSocketDataChanged = previousWebSocketDataRef.current !== heartRateTimeSeries;
     previousWebSocketDataRef.current = heartRateTimeSeries;
 
-    // If we're viewing custom data AND in Live mode AND WebSocket data updated
-    // CHECK: SHOULDN'T HAVE TO RELY ON custom or default data
-    if (customData && isLiveMode && webSocketDataChanged && heartRateTimeSeries) {
+    // If in Live mode AND WebSocket data updated, refresh the data
+    if (isLiveMode && webSocketDataChanged && heartRateTimeSeries) {
       console.log('WebSocket notification received in Live mode - auto-refreshing...');
       fetchCustomRange();
     }
@@ -283,20 +288,9 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
             />
             Live
           </label>
-          <button
-            onClick={fetchCustomRange}
-            disabled={isLoading}
-            style={{
-              padding: '5px 15px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: isLoading ? 'wait' : 'pointer'
-            }}
-          >
-            {isLoading ? 'Loading...' : 'Fetch Range'}
-          </button>
+          {isLoading && (
+            <span style={{ color: '#666', fontStyle: 'italic' }}>Loading...</span>
+          )}
         </div>
         {fetchError && (
           <div style={{ color: 'red', marginTop: '10px' }}>
@@ -358,7 +352,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
         layout={{
           width: 1200,
           height: 600,
-          title: { text: 'Biosensor Data - Last 24 Hours (Backend-v2)' },
+          title: { text: 'Biosensor Data' },
           xaxis: { title: 'Time (PST)' },
           yaxis: { title: 'Value' },
           showlegend: true,
