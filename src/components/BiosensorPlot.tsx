@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
-import type { HeartRateEntry, DataSeries } from '../types/biosensor';
+import type { BiosensorEntry, DataSeries } from '../types/biosensor';
 import { API_ENDPOINTS, API_HEADERS } from '../constants/api';
 
-interface HeartRatePlotProps {
-  heartRateTimeSeries: HeartRateEntry[] | null;
+interface BiosensorPlotProps {
+  biosensorTimeSeries: BiosensorEntry[] | null;
   isConnected: boolean;
 }
 
-const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
+const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isConnected }) => {
   // State to track which data series are selected for display
   // Default to show all available data series
   const [selectedSeries, setSelectedSeries] = useState<DataSeries[]>([
@@ -19,7 +19,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   ]);
 
   // State for datetime range controls
-  const [customData, setCustomData] = useState<HeartRateEntry[] | null>(null);
+  const [customData, setCustomData] = useState<BiosensorEntry[] | null>(null);
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [startDatetime, setStartDatetime] = useState(() => {
     const date = new Date();
@@ -89,21 +89,21 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   }, [startDatetime, endDatetime, isLiveMode]);
 
   // Auto-refresh when WebSocket sends new data in Live mode
-  const previousWebSocketDataRef = useRef<HeartRateEntry[] | null>(null);
+  const previousWebSocketDataRef = useRef<BiosensorEntry[] | null>(null);
 
   useEffect(() => {
     // Check if WebSocket data actually changed (not just initial render)
-    const webSocketDataChanged = previousWebSocketDataRef.current !== heartRateTimeSeries;
-    previousWebSocketDataRef.current = heartRateTimeSeries;
+    const webSocketDataChanged = previousWebSocketDataRef.current !== biosensorTimeSeries;
+    previousWebSocketDataRef.current = biosensorTimeSeries;
 
     // If in Live mode AND WebSocket data updated, refresh the data
-    if (isLiveMode && webSocketDataChanged && heartRateTimeSeries) {
-      console.log('WebSocket notification received in Live mode - auto-refreshing...');
+    if (isLiveMode && webSocketDataChanged && biosensorTimeSeries) {
+      console.log('WebSocket notification of new data received in Live mode - auto-refreshing...');
       fetchCustomRange();
     }
-  }, [heartRateTimeSeries]); // Trigger when WebSocket data changes
+  }, [biosensorTimeSeries]); // Trigger when WebSocket data changes
 
-  const getNonNullEntries = (data: HeartRateEntry[] | null): HeartRateEntry[] => {
+  const getNonNullEntries = (data: BiosensorEntry[] | null): BiosensorEntry[] => {
     if (!data || !Array.isArray(data)) {
       console.log('getNonNullEntries: No data or not an array');
       return [];
@@ -112,7 +112,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     return filtered;
   };
 
-  const filterByMeasurementType = (entries: HeartRateEntry[], measurementType: string): HeartRateEntry[] => {
+  const filterByMeasurementType = (entries: BiosensorEntry[], measurementType: string): BiosensorEntry[] => {
     return entries.filter((entry) => entry.measurement_type === measurementType);
   };
 
@@ -122,19 +122,19 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     return date.toISOString().replace('Z', '');
   };
 
-  const extractMeasurementValues = (entries: HeartRateEntry[]): number[] => {
+  const extractMeasurementValues = (entries: BiosensorEntry[]): number[] => {
     return entries.map((entry) => {
       const value = entry.measurement_value;
       return typeof value === 'string' ? parseFloat(value) : Number(value);
     });
   };
 
-  const extractTimestamps = (entries: HeartRateEntry[]): string[] => {
+  const extractTimestamps = (entries: BiosensorEntry[]): string[] => {
     return entries.map((entry) => convertUtcToPst(entry.timestamp!));
   };
 
   // Use custom data if available, otherwise use live WebSocket data
-  const dataToUse = customData || heartRateTimeSeries;
+  const dataToUse = customData || biosensorTimeSeries;
   const nonNullEntries = getNonNullEntries(dataToUse);
 
   // Log first few timestamps to see format
@@ -142,12 +142,12 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     console.log('First timestamp in data:', nonNullEntries.slice(0, 1).map(e => e.timestamp), 'Last timestamp in data:', nonNullEntries.slice(-1).map(e => e.timestamp));
   }
   const dateFilteredEntries = nonNullEntries;
-    
+
   const hrNonSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate');
   const hrSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate_session');
   const hrvEntries = filterByMeasurementType(dateFilteredEntries, 'hrv');
   const motionEntries = filterByMeasurementType(dateFilteredEntries, 'motion_count');
-  
+
   // Summary info
   console.log('Unique sensor modes in data:', [...new Set(dateFilteredEntries.map(e => e.sensor_mode))]);
   console.log('Unique measurement types in data:', [...new Set(dateFilteredEntries.map(e => e.measurement_type))]);
@@ -160,7 +160,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   console.log('Sample non-session entry:', hrNonSessionEntries[0]);
 
   // If no data yet, show a message
-  if (!heartRateTimeSeries || heartRateTimeSeries.length === 0) {
+  if (!biosensorTimeSeries || biosensorTimeSeries.length === 0) {
     return (
       <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
         <p>Waiting for biosensor data from database...</p>
@@ -349,4 +349,4 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   );
 };
 
-export default HeartRatePlot;
+export default BiosensorPlot;

@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import type { HeartRateEntry } from '../types/biosensor';
+import type { BiosensorEntry } from '../types/biosensor';
 import { API_ENDPOINTS, API_HEADERS } from '../constants/api';
 
-export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
-  const [heartRateTimeSeries, setHeartRateTimeSeries] = useState<HeartRateEntry[] | null>(null);
+export const useBiosensorWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
+  const [biosensorTimeSeries, setBiosensorTimeSeries] = useState<BiosensorEntry[] | null>(null);
   const [isConnected, setIsConnected] = useState(false); // Websocket connection
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null); // Websocket connection persists across re-renders
@@ -60,7 +60,7 @@ export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
           try {
             console.log('Fetching INITIAL biosensor data...');
             const data = await fetchBiosensorData();
-            setHeartRateTimeSeries(data);
+            setBiosensorTimeSeries(data);
           } catch (err) {
             console.error('Error fetching initial data:', err);
             setError('Failed to fetch initial biosensor data');
@@ -74,12 +74,10 @@ export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
 
             // Handle different message types from backend-v2
             if (data.type === 'heartrate_update' || data.type === 'session_update') {
-              // Backend-v2 sends heartrate_update and session_update notifications
-              console.log(`${data.type} notification received:`, data.message);
               console.log('Fetching LATEST biosensor data...');
               try {
                 const latestData = await fetchBiosensorData();
-                setHeartRateTimeSeries(latestData);
+                setBiosensorTimeSeries(latestData);
               } catch (err) {
                 console.error('Error fetching updated data:', err);
                 setError('Failed to fetch updated biosensor data');
@@ -89,10 +87,10 @@ export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
               console.log('Received pong from server:', data.message);
             } else if (data.data) {
               // Direct data payload
-              setHeartRateTimeSeries(data.data);
+              setBiosensorTimeSeries(data.data);
             } else if (Array.isArray(data)) {
               // Direct array of biosensor entries
-              setHeartRateTimeSeries(data);
+              setBiosensorTimeSeries(data);
             }
           } catch (err) {
             console.error('Error parsing WebSocket message:', err);
@@ -134,5 +132,5 @@ export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
     };
   }, [url]);
 
-  return { heartRateTimeSeries, isConnected, error };
+  return { biosensorTimeSeries, isConnected, error };
 };
