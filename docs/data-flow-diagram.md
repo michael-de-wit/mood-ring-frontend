@@ -1,145 +1,238 @@
-# Data Flow Diagram
+# Architecture   Diagrams
 
-## Complete System Data Flow
+## Data Flow
 
 ```mermaid
 graph TB
     subgraph External["External APIs"]
         OuraAPI[Oura API]
-        OuraHR["heartrate endpoint"]
-        OuraSession["session endpoint"]
+        OuraHR["Endpoint: /heartrate"]
+        OuraSession["Endpoint: /session"]
     end
 
     subgraph Backend["Backend-v2 Python/FastAPI"]
-        Poller[Polling Service]
+        subgraph Poller[Polling Service]
+            HRPoller[Heartrate Polling]
+            SessionPoller[Session Polling]
+        end
         HRTransform[Heart Rate Transform]
         SessionTransform[Session Data Transform]
-        PydanticModel[BiosensorData Model]
-        MongoDB[(MongoDB Database)]
-        BiosensorColl[biosensor_data collection]
+        PydanticModel[BiosensorData Model<br>Raw Data]
+        BiosensorColl[Biosensor Data Handler]
+        DBTrigger{New data<br/>in DB?}
         WSEndpoint[WebSocket: /ws/ouratimeseries]
         RESTEndpoint[REST: /ouratimeseries/live]
     end
 
+    subgraph Database["Database Layer"]
+        MongoDB[(MongoDB Database)]
+    end
+
     subgraph Frontend["Frontend React/TypeScript"]
-        WSHook[useBiosensorWebSocket Hook]
-        WSConnection[WebSocket Connection]
-        BiosensorState[biosensorTimeSeries State]
-        CustomDataState[customData State]
-        TypeFilter[Filter by measurement_type]
-        TimeConvert[UTC to PST Conversion]
-        BiosensorPlot[BiosensorPlot Component]
-        DateInputs[Date Range Inputs]
-        SeriesCheckboxes[Data Series Checkboxes]
-        PlotlyChart[Plotly.js Chart]
+        WSHook[WebSocket Connection<br/>useBiosensorWebSocket Hook]
+        LiveModeCheck{Live mode?}
+        BiosensorDataState[Biosensor Data State]
+
+        subgraph BiosensorPlot[BiosensorPlot Component]
+            DateInputs[Date Range Inputs]
+            SeriesCheckboxes[Data Series Checkboxes]
+            PlotlyChart[Plotly.js Chart]
+        end
     end
 
     OuraAPI --> OuraHR
     OuraAPI --> OuraSession
-    OuraHR --> Poller
-    OuraSession --> Poller
-    Poller --> HRTransform
-    Poller --> SessionTransform
+    HRPoller -.polls for new data.-> OuraHR
+    OuraHR -.returns data.-> HRPoller
+    SessionPoller -.polls for new data.-> OuraSession
+    OuraSession -.returns data.-> SessionPoller
+    HRPoller --> HRTransform
+    SessionPoller --> SessionTransform
     HRTransform --> PydanticModel
     SessionTransform --> PydanticModel
-    PydanticModel --> MongoDB
-    MongoDB --> BiosensorColl
+    PydanticModel --> BiosensorColl
+    BiosensorColl <--> MongoDB
+    BiosensorColl --> DBTrigger
+    DBTrigger -->|Yes| WSEndpoint
 
-    BiosensorColl -.triggers.-> WSEndpoint
-    WSEndpoint --> WSConnection
-    WSConnection --> WSHook
-    WSHook --> RESTEndpoint
-    RESTEndpoint -.queries.-> BiosensorColl
-    RESTEndpoint --> WSHook
-    WSHook --> BiosensorState
-
+    WSEndpoint -.Send notification.-> WSHook
+    WSHook --> LiveModeCheck
+    DateInputs -.provides date range.-> LiveModeCheck
+    LiveModeCheck -->|Yes| RESTEndpoint
+    RESTEndpoint -.queries with date range.-> BiosensorColl
+    BiosensorColl -.returns filtered data.-> RESTEndpoint
+    RESTEndpoint --> BiosensorDataState
     DateInputs -.onChange.-> RESTEndpoint
-    RESTEndpoint --> CustomDataState
-    BiosensorState --> TypeFilter
-    CustomDataState --> TypeFilter
-    TypeFilter --> TimeConvert
-    TimeConvert --> PlotlyChart
+    BiosensorDataState -.Filters by Datetime.-> PlotlyChart
+    SeriesCheckboxes -.Filters by Measurement Type.-> PlotlyChart
 
-    BiosensorPlot --> DateInputs
-    BiosensorPlot --> SeriesCheckboxes
-    BiosensorPlot --> PlotlyChart
-    SeriesCheckboxes -.controls.-> TypeFilter
-
-    style OuraAPI fill:#ff6b6b
-    style MongoDB fill:#4ecdc4
-    style WSEndpoint fill:#95e1d3
-    style RESTEndpoint fill:#95e1d3
-    style BiosensorPlot fill:#ffe66d
-    style PlotlyChart fill:#a8e6cf
+    style OuraAPI fill:#c0392b
+    style OuraHR fill:#c0392b
+    style OuraSession fill:#c0392b
+    style MongoDB fill:#16a085
+    style DBTrigger fill:#176161
+    style LiveModeCheck fill:#8C4C1F
+    style WSEndpoint fill:#176161
+    style RESTEndpoint fill:#176161
+    style BiosensorPlot fill:#8C4C1F
 ```
 
-## Data Transformation Details
+### Legend
+
+- **Solid arrows (→)**: Data flow
+- **Dotted arrows (-.->)**: Control flow, triggers, or metadata (e.g., "provides date range", "onChange")
+- **Bidirectional arrows (<-->)**: Two-way communication
+- **Dark Red (#c0392b)**: External APIs (Oura API and endpoints)
+- **Teal (#16a085)**: Database layer
+- **Dark Teal (#176161)**: Backend endpoints and decision points
+- **Brown (#8C4C1F)**: Frontend UI components and decision points
+- **Decision diamonds {}**: Conditional logic points
+
+## Database Architecture
 
 ```mermaid
-graph LR
-    subgraph "Oura API Response"
-        OuraHRData["
-        {
-          bpm: 72,
-          timestamp: '2026-01-05T10:30:00Z',
-          source: 'awake'
-        }
-        "]
+graph TB
+    subgraph MongoDB["MongoDB Database"]
+        subgraph Collections["Collections"]
+            ConsolidatedColl[(consolidated_biosensor_data)]
+            RawHRColl[(raw_heartrate)]
+            RawSessionColl[(raw_session)]
+        end
     end
 
-    subgraph "Backend Transform"
-        Transform["
-        measurement_type: 'heartrate'
-        measurement_value: 72
-        measurement_unit: 'bpm'
-        sensor_mode: 'awake'
-        data_source: 'oura'
-        device_source: 'oura_ring_4'
-        "]
+    subgraph Transform["Data Transformation"]
+        HRTransform[Heart Rate Transform]
+        SessionTransform[Session Transform]
     end
 
-    subgraph "MongoDB Document"
-        MongoDoc["
-        {
-          timestamp: ISODate(...),
-          measurement_type: 'heartrate',
-          measurement_value: 72,
-          measurement_unit: 'bpm',
-          sensor_mode: 'awake',
-          data_source: 'oura',
-          device_source: 'oura_ring_4'
-        }
-        "]
-    end
+    RawHRColl --> HRTransform
+    RawSessionColl --> SessionTransform
 
-    subgraph "Frontend Type"
-        TSType["
-        BiosensorEntry {
-          timestamp: '2026-01-05T10:30:00Z',
-          measurement_type: 'heartrate',
-          measurement_value: 72,
-          measurement_unit: 'bpm',
-          sensor_mode: 'awake',
-          data_source: 'oura',
-          device_source: 'oura_ring_4'
-        }
-        "]
-    end
+    HRTransform --> ConsolidatedColl
+    SessionTransform --> ConsolidatedColl
 
-    subgraph "Display Processing"
-        Display["
-        Time: '2026-01-05T02:30:00' (PST)
-        Value: 72
-        Series: 'Heart Rate (Non-Session)'
-        Color: red
-        "]
-    end
-
-    OuraHRData --> Transform
-    Transform --> MongoDoc
-    MongoDoc --> TSType
-    TSType --> Display
+    style MongoDB fill:#16a085
+    style ConsolidatedColl fill:#45b7a0
+    style RawHRColl fill:#e67e22
+    style RawSessionColl fill:#e67e22
+    style Transform fill:#2980b9
 ```
+
+### Database Collections
+
+#### 1. **consolidated_biosensor_data** (Processed Data)
+Primary collection for querying and visualization. Contains normalized, time-series biosensor data.
+
+**Example Document:**
+```json
+{
+  "_id": "695c0207404b8d8589393553",
+  "timestamp": "2025-12-16T01:07:42.002Z",
+  "measurement_type": "heartrate",
+  "measurement_value": 48,
+  "measurement_unit": "bpm",
+  "sensor_mode": "heartrate",
+  "data_source": "live",
+  "device_source": "oura_ring_4",
+  "source_endpoint": "usercollection/heartrate",
+  "inserted_at": "2026-01-05T18:25:11.627620+00:00"
+}
+```
+
+**Indexes:**
+- `timestamp` (ascending) - for time-range queries
+- `measurement_type` (ascending) - for filtering by type
+- `(timestamp, measurement_type)` (compound) - optimized filtered queries
+
+**Query Patterns:**
+- Time-range: `find({ timestamp: { $gte: start, $lte: end } })`
+- Type-filtered: `find({ measurement_type: 'heartrate', timestamp: { $gte: start } })`
+- Live data: `find({ timestamp: { $gte: start } }).limit(10000)`
+
+#### 2. **raw_heartrate** (Raw API Data)
+Stores raw responses from Oura API `/heartrate` endpoint. Used for data archival and reprocessing.
+
+**Example Document:**
+```json
+{
+  "_id": "6954b70c93934cd13492481e",
+  "data": {
+    "data": [
+      {
+        "timestamp": "2025-12-16T01:07:42.002Z",
+        "bpm": 48,
+        "source": "live"
+      }
+      // ... 11,698 total entries
+    ]
+  },
+  "inserted_at": "2025-12-31T05:39:24.722544+00:00",
+  "source": "oura_api",
+  "endpoint": "usercollection/heartrate"
+}
+```
+
+**Purpose:**
+- Archive raw API responses
+- Enable data reprocessing if transformation logic changes
+- Debugging and data validation
+
+#### 3. **raw_session** (Raw Session Data)
+Stores raw responses from Oura API `/session` endpoint containing workout/activity sessions.
+
+**Example Document:**
+```json
+{
+  "_id": "6959891bb6a3b4f1c07f171e",
+  "data": {
+    "data": [
+      {
+        "id": "292a1e36-cdf0-4a2c-a227-e9c0242f2c70",
+        "day": "2025-12-28",
+        "start_datetime": "2025-12-28T08:31:18.000-08:00",
+        "end_datetime": "2025-12-28T08:41:18.000-08:00",
+        "type": "meditation",
+        "mood": "same",
+        "heart_rate": { 
+            "interval": 5,
+            "items": [
+                50.9,
+                50.7,
+                /* ... */
+            ]
+         },
+        "heart_rate_variability": {
+            "interval": 5,
+            "items": [
+                97,
+                96,
+                /* ... */
+            ]
+        },
+        "motion_count": { 
+            "interval": 5,
+            "items": [
+                0,
+                12,
+                /* ... */
+            ]
+            /* ... */ 
+            }
+      }
+      // ... 14 total sessions
+    ],
+    "next_token": null
+  },
+  "inserted_at": "2026-01-03T21:24:43.497404+00:00",
+  "source": "oura_api",
+  "endpoint": "usercollection/session"
+}
+```
+
+**Purpose:**
+- Store complete session data including HRV, motion, and HR during activities
+- Track workout types and mood data
+- Enable future feature development using session metadata
 
 ## Measurement Types Flow
 
@@ -174,10 +267,10 @@ graph TD
     HRV --> BlueLine
     Motion --> GreenLine
 
-    style HR fill:#ff6b6b
-    style HRSession fill:#ffa07a
-    style HRV fill:#87ceeb
-    style Motion fill:#90ee90
+    style HR fill:#c0392b
+    style HRSession fill:#d35400
+    style HRV fill:#2980b9
+    style Motion fill:#27ae60
 ```
 
 ## Real-time Update Flow
@@ -255,137 +348,3 @@ graph LR
 
     URL --> Response
 ```
-
-## Live Mode Auto-Refresh Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant DateInputs as Date Range Inputs
-    participant LiveCheckbox as Live Mode Checkbox
-    participant Plot as BiosensorPlot
-    participant WSHook as useBiosensorWebSocket
-    participant API as Backend API
-
-    Note over User,Plot: User Configures Date Range
-    User->>DateInputs: Set start datetime
-    User->>LiveCheckbox: Check "Live" mode
-
-    Note over Plot,API: Initial Fetch (useEffect triggered)
-    DateInputs->>Plot: onChange event
-    Plot->>Plot: useEffect([startDatetime, endDatetime, isLiveMode])
-    Plot->>API: GET /ouratimeseries/live<br/>?start_datetime=...&end_datetime=NOW
-    API-->>Plot: Return biosensor data
-    Plot->>Plot: Update customData state
-    Plot->>Plot: Render chart
-
-    Note over WSHook,Plot: WebSocket Notification Arrives
-    WSHook->>WSHook: Receive {type: 'heartrate_update'}
-    WSHook->>WSHook: Update biosensorTimeSeries state
-
-    Note over Plot,API: Auto-Refresh in Live Mode
-    Plot->>Plot: useEffect([biosensorTimeSeries]) triggers
-    Plot->>Plot: Check: isLiveMode && biosensorTimeSeries changed?
-    Plot->>API: GET /ouratimeseries/live<br/>?start_datetime=...&end_datetime=NOW
-    API-->>Plot: Return updated biosensor data
-    Plot->>Plot: Update customData state
-    Plot->>Plot: Re-render with latest data
-
-    Note over User,Plot: User sees live updates automatically
-```
-
-## State Management Architecture
-
-```mermaid
-graph TB
-    subgraph "useBiosensorWebSocket Hook State"
-        WSState[biosensorTimeSeries<br/>Last 24 hours via WebSocket]
-        Connected[isConnected<br/>WebSocket connection status]
-        Error[error<br/>Error messages]
-    end
-
-    subgraph "BiosensorPlot Component State"
-        Custom[customData<br/>User-selected date range]
-        Live[isLiveMode<br/>Live mode enabled?]
-        Start[startDatetime<br/>Range start]
-        End[endDatetime<br/>Range end]
-        Series[selectedSeries<br/>Which data to show]
-        Loading[isLoading<br/>Fetch in progress?]
-    end
-
-    subgraph "Data Selection Logic"
-        Decision{customData<br/>exists?}
-        UseCustom[Use customData]
-        UseWS[Use biosensorTimeSeries]
-    end
-
-    subgraph "Display Pipeline"
-        Filter[Filter by measurement_type]
-        Convert[UTC → PST conversion]
-        Extract[Extract timestamps & values]
-        Render[Render Plotly chart]
-    end
-
-    Custom --> Decision
-    WSState --> Decision
-    Decision -->|Yes| UseCustom
-    Decision -->|No| UseWS
-
-    UseCustom --> Filter
-    UseWS --> Filter
-
-    Filter --> Convert
-    Convert --> Extract
-    Extract --> Render
-
-    Series -.controls.-> Filter
-    Live -.determines.-> Decision
-
-    style Custom fill:#ffe66d
-    style WSState fill:#95e1d3
-    style Decision fill:#ff6b6b
-    style Render fill:#a8e6cf
-```
-
-## File Organization
-
-```mermaid
-graph TB
-    subgraph "Project Structure"
-        subgraph "Types"
-            BiosensorTS[biosensor.ts<br/>- BiosensorEntry<br/>- DataSeries]
-        end
-
-        subgraph "Constants"
-            ApiTS[api.ts<br/>- API_ENDPOINTS<br/>- API_HEADERS<br/>- API_LIMITS]
-        end
-
-        subgraph "Hooks"
-            WebSocketHook[useBiosensorWebSocket.tsx<br/>- WebSocket connection<br/>- Data fetching<br/>- State management]
-        end
-
-        subgraph "Components"
-            PlotComponent[BiosensorPlot.tsx<br/>- Date controls<br/>- Series selection<br/>- Data visualization]
-        end
-
-        subgraph "App"
-            AppTSX[App.tsx<br/>- Hook consumption<br/>- Component rendering]
-        end
-    end
-
-    BiosensorTS -.types.-> WebSocketHook
-    BiosensorTS -.types.-> PlotComponent
-    ApiTS -.config.-> WebSocketHook
-    ApiTS -.config.-> PlotComponent
-    WebSocketHook -.data.-> AppTSX
-    AppTSX -.props.-> PlotComponent
-```
-
-## Legend
-
-- **Solid arrows (→)**: Data flow
-- **Dotted arrows (-.->)**: Type definitions, configuration, or triggers
-- **Red**: External APIs
-- **Teal**: Backend services
-- **Yellow**: Frontend components
-- **Green**: Data display
