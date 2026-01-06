@@ -44,7 +44,7 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
 
     const jsonData = await response.json();
     console.log('Response data:', jsonData);
-    console.log('Data fetched:', jsonData.data?.length, 'records');
+    console.log('Data fetched (initial):', jsonData.data?.length, 'records');
 
     if (jsonData.data && jsonData.data.length > 0) {
       console.log('First timestamp in response:', jsonData.data[0].timestamp);

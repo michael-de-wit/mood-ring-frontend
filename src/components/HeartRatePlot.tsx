@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
 
 interface HeartRateEntry {
-  timestamp: string | null;
-  measurement_type: string | null;
-  measurement_value: number | string | null;
-  measurement_unit: string | null;
-  sensor_mode: string | null;
-  data_source: string | null;
-  device_source: string | null;
+  timestamp: string | null; // e.g. "2026-01-04T22:18:21.700Z"
+  measurement_type: string | null; // e.g. "heartrate"
+  measurement_value: number | string | null; // e.g. 57
+  measurement_unit: string | null; // e.g. "bpm"
+  sensor_mode: string | null; // e.g. "heartrate"
+  data_source: string | null; // e.g. "workout"
+  device_source: string | null; // e.g. "oura_ring_4"
 }
 
 interface HeartRatePlotProps {
@@ -16,15 +16,18 @@ interface HeartRatePlotProps {
   isConnected: boolean;
 }
 
+// Possible data series selections; for display in the plot
+// Union type
 type DataSeries = 'hr_non_session' | 'hr_session' | 'hrv' | 'motion_count';
 
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
-  // State to track which data series are selected
+  // State to track which data series are selected for display
+  // Default to show all available data series
   const [selectedSeries, setSelectedSeries] = useState<DataSeries[]>([
     'hr_non_session',
     'hr_session',
-    'hrv',
-    'motion_count'
+    'hrv'
+    // ,'motion_count' // Exclude motion count from initial default
   ]);
 
   // State for datetime range controls
@@ -32,20 +35,25 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [startDatetime, setStartDatetime] = useState(() => {
     const date = new Date();
-    date.setHours(date.getHours() - 24);
-    return date.toISOString().slice(0, 16); // Format for datetime-local input
+    date.setHours(date.getHours() - 24); // Set default start datetime to 24 hours prior to current time
+                                         // e.g. 'Sun Jan 04 2026 14:52:28 GMT-0800 (Pacific Standard Time)'
+    const date_iso8601 = date.toISOString().slice(0, 16); // Format for UTC ISO-8601 string
+                                                          // e.g. '2026-01-04T22:51'
+    return date_iso8601;
   });
   const [endDatetime, setEndDatetime] = useState(() => {
-    return new Date().toISOString().slice(0, 16);
+    return new Date().toISOString().slice(0, 16); // i.e. default to the current time
   });
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const toggleSeries = (series: DataSeries) => {
+  const toggleSeries = (series: DataSeries) => { // e.g. User unchecks 'HRV'
     setSelectedSeries(prev =>
-      prev.includes(series)
-        ? prev.filter(s => s !== series)
-        : [...prev, series]
+      prev.includes(series) // e.g. Does the previous set of selected series include a checked 'HRV'
+        ? prev.filter(s => s !== series) // e.g. If 'HRV' is in the set, remove it
+                                         // i.e. Go through each data series in the current set, only keep the series
+                                         // which do not equal the selected series
+        : [...prev, series] // e.g. If 'HRV' is not in the set, add it
     );
   };
 
@@ -55,40 +63,41 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
 
     try {
       const start = new Date(startDatetime).toISOString();
-      const end = isLiveMode ? new Date().toISOString() : new Date(endDatetime).toISOString();
+      const end = isLiveMode ? new Date().toISOString() : new Date(endDatetime).toISOString(); // If in Live mode
+                                                                                               // Use current time
+                                                                                               // else use the end datetime input
 
+      // TO UPDATE FOR PRODUCTION
       const apiUrl = `https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live?start_datetime=${start}&end_datetime=${end}`;
+                                                                                            // Fetch data using the start / end datetime inputs
+                                                                                            // as URL parameters
 
       console.log('Fetching custom range:', start, 'to', end);
 
+      // TO UPDATE FOR PRODUCTION
       const response = await fetch(apiUrl, {
         headers: { 'ngrok-skip-browser-warning': 'true' }
       });
 
       const jsonData = await response.json();
 
-      // Check if we hit the API limit (assuming backend returns max 1000 records)
-      if (jsonData.data && jsonData.data.length >= 1000) {
-        alert('⚠️ API Record Limit Reached!\n\nThe query returned 1000 records (the maximum). There may be more data available. Try narrowing your date range to see all data.');
+      // Check if we hit the record limit in the API response
+      const recordCount = jsonData.count || jsonData.data?.length || 0;
+      const recordLimit = jsonData.limit || 10000;
+
+      // If we do hit the API record limit, alert the user
+      if (recordCount >= recordLimit) {
+        alert(`API Record Limit Reached.\n\nThe query returned ${recordCount} records (the maximum limit of ${recordLimit}). There may be more data available in the range which is not being displayed. Try narrowing your date range.`);
       }
 
       setCustomData(jsonData.data);
-      console.log('Custom data fetched:', jsonData.data?.length, 'records');
+      console.log(`Data fetched (custom date range): ${recordCount} records (limit: ${recordLimit})`);
     } catch (err) {
       console.error('Error fetching custom range:', err);
       setFetchError('Failed to fetch custom date range data');
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Flip the loading state back to false
     }
-  };
-
-  const resetToLive = () => {
-    setCustomData(null);
-    setIsLiveMode(true);
-    const now = new Date();
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    setStartDatetime(yesterday.toISOString().slice(0, 16));
-    setEndDatetime(now.toISOString().slice(0, 16));
   };
 
   // Auto-refresh custom range when WebSocket sends new data in Live mode
@@ -100,21 +109,12 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     previousWebSocketDataRef.current = heartRateTimeSeries;
 
     // If we're viewing custom data AND in Live mode AND WebSocket data updated
+    // CHECK: SHOULDN'T HAVE TO RELY ON custom or default data
     if (customData && isLiveMode && webSocketDataChanged && heartRateTimeSeries) {
-      console.log('WebSocket notification received in Live mode - auto-refreshing custom range...');
+      console.log('WebSocket notification received in Live mode - auto-refreshing...');
       fetchCustomRange();
     }
   }, [heartRateTimeSeries]); // Trigger when WebSocket data changes
-
-  console.log('=== HeartRatePlot Debug ===');
-  console.log('Raw heartRateTimeSeries:', heartRateTimeSeries);
-  console.log('Is array?', Array.isArray(heartRateTimeSeries));
-  console.log('Length:', heartRateTimeSeries?.length);
-
-  if (heartRateTimeSeries && heartRateTimeSeries.length > 0) {
-    console.log('First entry:', heartRateTimeSeries[0]);
-    console.log('Last entry:', heartRateTimeSeries[heartRateTimeSeries.length - 1]);
-  }
 
   const getNonNullEntries = (data: HeartRateEntry[] | null): HeartRateEntry[] => {
     if (!data || !Array.isArray(data)) {
@@ -122,31 +122,6 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
       return [];
     }
     const filtered = data.filter((entry) => entry.timestamp !== null && entry.measurement_value !== null);
-    console.log(`getNonNullEntries: Filtered ${data.length} -> ${filtered.length} entries`);
-    return filtered;
-  };
-
-  const filterByDateRange = (entries: HeartRateEntry[], startDate: string, endDate: string): HeartRateEntry[] => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    const filtered = entries.filter((entry) => {
-      const entryDate = new Date(entry.timestamp!);
-      const inRange = entryDate >= start && entryDate <= end;
-      return inRange;
-    });
-
-    // Debug: show what got filtered
-    if (entries.length > 0) {
-      console.log('Date filter - Start:', start.toISOString());
-      console.log('Date filter - End:', end.toISOString());
-      console.log('Sample entry dates (first 3):');
-      entries.slice(0, 3).forEach((entry, i) => {
-        const entryDate = new Date(entry.timestamp!);
-        console.log(`  ${i}: ${entry.timestamp} -> ${entryDate.toISOString()}`);
-      });
-    }
-
     return filtered;
   };
 
@@ -160,7 +135,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
     return date.toISOString().replace('Z', '');
   };
 
-  const extractHeartRateValues = (entries: HeartRateEntry[]): number[] => {
+  const extractMeasurementValues = (entries: HeartRateEntry[]): number[] => {
     return entries.map((entry) => {
       const value = entry.measurement_value;
       return typeof value === 'string' ? parseFloat(value) : Number(value);
@@ -175,54 +150,33 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   const dataToUse = customData || heartRateTimeSeries;
   const nonNullEntries = getNonNullEntries(dataToUse);
 
-  console.log('Total non-null entries:', nonNullEntries.length);
-
   // Log first few timestamps to see format
   if (nonNullEntries.length > 0) {
-    console.log('First 5 timestamps:', nonNullEntries.slice(0, 5).map(e => e.timestamp));
-    console.log('Last 5 timestamps:', nonNullEntries.slice(-5).map(e => e.timestamp));
+    console.log('First timestamp in data:', nonNullEntries.slice(0, 1).map(e => e.timestamp), 'Last timestamp in data:', nonNullEntries.slice(-1).map(e => e.timestamp));
   }
-
-  // Use all entries (already filtered to 24 hours by API)
   const dateFilteredEntries = nonNullEntries;
-
-  console.log('Total entries in date range:', dateFilteredEntries.length);
-  console.log('Unique measurement types:', [...new Set(dateFilteredEntries.map(e => e.measurement_type))]);
-  console.log('Unique sensor modes:', [...new Set(dateFilteredEntries.map(e => e.sensor_mode))]);
-
-  // Get all heartrate entries first
-  const allHREntries = filterByMeasurementType(dateFilteredEntries, 'heartrate');
-  console.log('Total heartrate entries:', allHREntries.length);
-  console.log('Sample heartrate entry:', allHREntries[0]);
-
-  // Split data into four series
-  // Backend-v2 measurement types:
-  // - 'heartrate' (from /heartrate endpoint, sensor_mode varies)
-  // - 'heartrate_session' (from /session endpoint)
-  // - 'hrv' (heart rate variability from /session endpoint)
-  // - 'motion_count' (motion data from /session endpoint)
-
+    
   const hrNonSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate');
   const hrSessionEntries = filterByMeasurementType(dateFilteredEntries, 'heartrate_session');
   const hrvEntries = filterByMeasurementType(dateFilteredEntries, 'hrv');
   const motionEntries = filterByMeasurementType(dateFilteredEntries, 'motion_count');
-
-  console.log('HR (non-session/heartrate):', hrNonSessionEntries.length, 'values');
-  console.log('Sample non-session entry:', hrNonSessionEntries[0]);
-  console.log('HR (session/heartrate_session):', hrSessionEntries.length, 'values');
+  
+  // Summary info
+  console.log('Unique sensor modes in data:', [...new Set(dateFilteredEntries.map(e => e.sensor_mode))]);
+  console.log('Unique measurement types in data:', [...new Set(dateFilteredEntries.map(e => e.measurement_type))]);
+  console.log('Total entries in data:', nonNullEntries.length);
+  console.log('Total non-session heart rate entries in data:', hrNonSessionEntries.length, 'values');
+  console.log('Total session heart rate entries in data:', hrSessionEntries.length, 'values');
+  console.log('Total session HRV entries in data:', hrvEntries.length, 'values');
+  console.log('Total session motion count entries in data:', motionEntries.length, 'values');
   console.log('Sample session entry:', hrSessionEntries[0]);
-  console.log('HRV:', hrvEntries.length, 'values');
-  console.log('Sample HRV entry:', hrvEntries[0]);
-  console.log('Motion Count:', motionEntries.length, 'values');
-  console.log('Sample motion entry:', motionEntries[0]);
+  console.log('Sample non-session entry:', hrNonSessionEntries[0]);
 
-  // If no data at all, show a message
+  // If no data yet, show a message
   if (!heartRateTimeSeries || heartRateTimeSeries.length === 0) {
     return (
       <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>No Data Available</h3>
-        <p>Waiting for biosensor data from backend-v2...</p>
-        <p>WebSocket Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}</p>
+        <p>Waiting for biosensor data from database...</p>
       </div>
     );
   }
@@ -233,7 +187,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   if (selectedSeries.includes('hr_non_session')) {
     plotData.push({
       x: extractTimestamps(hrNonSessionEntries),
-      y: extractHeartRateValues(hrNonSessionEntries),
+      y: extractMeasurementValues(hrNonSessionEntries),
       type: 'scatter' as const,
       mode: 'lines' as const,
       name: 'Heart Rate (Non-Session)',
@@ -248,7 +202,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   if (selectedSeries.includes('hr_session')) {
     plotData.push({
       x: extractTimestamps(hrSessionEntries),
-      y: extractHeartRateValues(hrSessionEntries),
+      y: extractMeasurementValues(hrSessionEntries),
       type: 'scatter' as const,
       mode: 'lines' as const,
       name: 'Heart Rate (Session)',
@@ -263,7 +217,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   if (selectedSeries.includes('hrv')) {
     plotData.push({
       x: extractTimestamps(hrvEntries),
-      y: extractHeartRateValues(hrvEntries),
+      y: extractMeasurementValues(hrvEntries),
       type: 'scatter' as const,
       mode: 'lines' as const,
       name: 'Heart Rate Variability',
@@ -278,7 +232,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
   if (selectedSeries.includes('motion_count')) {
     plotData.push({
       x: extractTimestamps(motionEntries),
-      y: extractHeartRateValues(motionEntries),
+      y: extractMeasurementValues(motionEntries),
       type: 'scatter' as const,
       mode: 'lines' as const,
       name: 'Motion Count',
@@ -300,9 +254,6 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
         borderRadius: '5px',
         marginBottom: '10px'
       }}>
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Date Range:</strong> {customData ? '📅 Custom Range' : '🔴 Live (Last 24 Hours)'}
-        </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <label>
             <strong>Start:</strong>
@@ -330,7 +281,7 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
               onChange={(e) => setIsLiveMode(e.target.checked)}
               style={{ marginRight: '5px' }}
             />
-            Live (Now)
+            Live
           </label>
           <button
             onClick={fetchCustomRange}
@@ -346,21 +297,6 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
           >
             {isLoading ? 'Loading...' : 'Fetch Range'}
           </button>
-          {customData && (
-            <button
-              onClick={resetToLive}
-              style={{
-                padding: '5px 15px',
-                backgroundColor: '#f44336',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: 'pointer'
-              }}
-            >
-              Reset to Live
-            </button>
-          )}
         </div>
         {fetchError && (
           <div style={{ color: 'red', marginTop: '10px' }}>
