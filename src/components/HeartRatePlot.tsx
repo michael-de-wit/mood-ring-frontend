@@ -1,24 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
-
-interface HeartRateEntry {
-  timestamp: string | null; // e.g. "2026-01-04T22:18:21.700Z"
-  measurement_type: string | null; // e.g. "heartrate"
-  measurement_value: number | string | null; // e.g. 57
-  measurement_unit: string | null; // e.g. "bpm"
-  sensor_mode: string | null; // e.g. "heartrate"
-  data_source: string | null; // e.g. "workout"
-  device_source: string | null; // e.g. "oura_ring_4"
-}
+import type { HeartRateEntry, DataSeries } from '../types/biosensor';
+import { API_ENDPOINTS, API_HEADERS } from '../constants/api';
 
 interface HeartRatePlotProps {
   heartRateTimeSeries: HeartRateEntry[] | null;
   isConnected: boolean;
 }
-
-// Possible data series selections; for display in the plot
-// Union type
-type DataSeries = 'hr_non_session' | 'hr_session' | 'hrv' | 'motion_count';
 
 const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isConnected }) => {
   // State to track which data series are selected for display
@@ -63,20 +51,14 @@ const HeartRatePlot: React.FC<HeartRatePlotProps> = ({ heartRateTimeSeries, isCo
 
     try {
       const start = new Date(startDatetime).toISOString();
-      const end = isLiveMode ? new Date().toISOString() : new Date(endDatetime).toISOString(); // If in Live mode
-                                                                                               // Use current time
-                                                                                               // else use the end datetime input
+      const end = isLiveMode ? new Date().toISOString() : new Date(endDatetime).toISOString();
 
-      // TO UPDATE FOR PRODUCTION
-      const apiUrl = `https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live?start_datetime=${start}&end_datetime=${end}`;
-                                                                                            // Fetch data using the start / end datetime inputs
-                                                                                            // as URL parameters
+      const apiUrl = `${API_ENDPOINTS.OURA_TIMESERIES_LIVE}?start_datetime=${start}&end_datetime=${end}`;
 
       console.log('Fetching custom range:', start, 'to', end);
 
-      // TO UPDATE FOR PRODUCTION
       const response = await fetch(apiUrl, {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
+        headers: API_HEADERS.NGROK_SKIP_WARNING
       });
 
       const jsonData = await response.json();

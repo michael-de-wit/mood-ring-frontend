@@ -9,10 +9,10 @@ function App() {
   return (
     <>
       <div style={{ padding: '10px', backgroundColor: '#f0f0f0', marginBottom: '10px' }}>
-        <strong>WebSocket Status:</strong> {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
         {error && <span style={{ color: 'red', marginLeft: '10px' }}>Error: {error}</span>}
       </div>
       <HeartRatePlot heartRateTimeSeries={heartRateTimeSeries} isConnected={isConnected} />
+      <strong>WebSocket Status:</strong> {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
     </>
   )
 }

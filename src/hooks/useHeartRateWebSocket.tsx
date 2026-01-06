@@ -1,16 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
+import type { HeartRateEntry } from '../types/biosensor';
+import { API_ENDPOINTS, API_HEADERS } from '../constants/api';
 
-interface HeartRateEntry {
-  timestamp: string | null;
-  measurement_type: string | null;
-  measurement_value: number | string | null;
-  measurement_unit: string | null;
-  sensor_mode: string | null;
-  data_source: string | null;
-  device_source: string | null;
-}
-
-export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-free.dev/ws/ouratimeseries') => {
+export const useHeartRateWebSocket = (url = API_ENDPOINTS.WEBSOCKET) => {
   const [heartRateTimeSeries, setHeartRateTimeSeries] = useState<HeartRateEntry[] | null>(null);
   const [isConnected, setIsConnected] = useState(false); // Websocket connection
   const [error, setError] = useState<string | null>(null);
@@ -31,15 +23,13 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
   // Helper function to fetch biosensor data with datetime parameters
   const fetchBiosensorData = async () => {
     const { start, end } = getLast24HoursRange();
-    const apiUrl = `https://keith-sorbic-huggingly.ngrok-free.dev/ouratimeseries/live?start_datetime=${start}&end_datetime=${end}`;
+    const apiUrl = `${API_ENDPOINTS.OURA_TIMESERIES_LIVE}?start_datetime=${start}&end_datetime=${end}`;
 
-    console.log('=== Fetching Biosensor Data ===');
-    console.log('Start datetime:', start);
-    console.log('End datetime:', end);
-    console.log('Full API URL:', apiUrl);
+    console.log('Fetching from: API URL:', apiUrl);
 
+    // UPDATE FOR PRODUCTION - RM NGROK
     const response = await fetch(apiUrl, {
-      headers: { 'ngrok-skip-browser-warning': 'true' }
+      headers: API_HEADERS.NGROK_SKIP_WARNING
     });
 
     const jsonData = await response.json();
@@ -68,7 +58,7 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
 
           // Fetch initial data immediately on connect
           try {
-            console.log('Fetching initial biosensor data (last 24 hours)...');
+            console.log('Fetching INITIAL biosensor data...');
             const data = await fetchBiosensorData();
             setHeartRateTimeSeries(data);
           } catch (err) {
@@ -80,13 +70,13 @@ export const useHeartRateWebSocket = (url = 'wss://keith-sorbic-huggingly.ngrok-
         ws.onmessage = async (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('WebSocket received:', data);
+            console.log('WebSocket notification received:', data);
 
             // Handle different message types from backend-v2
             if (data.type === 'heartrate_update' || data.type === 'session_update') {
               // Backend-v2 sends heartrate_update and session_update notifications
               console.log(`${data.type} notification received:`, data.message);
-              console.log('Fetching latest biosensor data (last 24 hours)...');
+              console.log('Fetching LATEST biosensor data...');
               try {
                 const latestData = await fetchBiosensorData();
                 setHeartRateTimeSeries(latestData);
