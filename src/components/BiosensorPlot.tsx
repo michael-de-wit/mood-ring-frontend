@@ -2,6 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
 import type { BiosensorEntry, DataSeries } from '../types/biosensor';
 import { API_ENDPOINTS, API_HEADERS } from '../constants/api';
+import {
+  Paper,
+  Box,
+  FormControlLabel,
+  Checkbox,
+  TextField,
+  Switch,
+  CircularProgress,
+  Typography,
+  Divider,
+  Stack,
+  Chip,
+  Card,
+  CardContent,
+} from '@mui/material';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 
 interface BiosensorPlotProps {
   biosensorTimeSeries: BiosensorEntry[] | null;
@@ -162,9 +181,14 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
   // If no data yet, show a message
   if (!biosensorTimeSeries || biosensorTimeSeries.length === 0) {
     return (
-      <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <p>Waiting for biosensor data from database...</p>
-      </div>
+      <Card elevation={1}>
+        <CardContent sx={{ textAlign: 'center', py: 6 }}>
+          <MonitorHeartIcon sx={{ fontSize: 64, color: 'primary.main', opacity: 0.5, mb: 2 }} />
+          <Typography variant="h6" color="text.secondary">
+            Waiting for biosensor data from database...
+          </Typography>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -181,7 +205,8 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
       line: {
         shape: 'spline' as const,
         smoothing: 0.0,
-        color: 'red'
+        color: '#C2583E', // Terracotta red
+        width: 2
       },
     });
   }
@@ -196,7 +221,8 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
       line: {
         shape: 'spline' as const,
         smoothing: 0.0,
-        color: 'orange'
+        color: '#E5A852', // Warm amber
+        width: 2
       },
     });
   }
@@ -211,7 +237,8 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
       line: {
         shape: 'spline' as const,
         smoothing: 0.0,
-        color: 'blue'
+        color: '#5B8A9F', // Dusty blue
+        width: 2
       },
     });
   }
@@ -226,126 +253,172 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
       line: {
         shape: 'spline' as const,
         smoothing: 0.0,
-        color: 'green'
+        color: '#7A9F6B', // Sage green
+        width: 2
       },
     });
   }
 
   return (
-    <div>
+    <Box>
       {/* Datetime Range Controls */}
-      <div style={{
-        padding: '15px',
-        backgroundColor: '#f9f9f9',
-        border: '1px solid #ddd',
-        borderRadius: '5px',
-        marginBottom: '10px'
-      }}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'left', flexWrap: 'wrap' }}>
-          <label>
-            <strong>Start:</strong>
-            <input
-              type="datetime-local"
-              value={startDatetime}
-              onChange={(e) => setStartDatetime(e.target.value)}
-              style={{ marginLeft: '5px', padding: '5px' }}
-            />
-          </label>
-          <label>
-            <strong>End:</strong>
-            <input
-              type="datetime-local"
-              value={endDatetime}
-              onChange={(e) => setEndDatetime(e.target.value)}
-              disabled={isLiveMode}
-              style={{ marginLeft: '5px', padding: '5px' }}
-            />
-          </label>
-          <label style={{ cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={isLiveMode}
-              onChange={(e) => setIsLiveMode(e.target.checked)}
-              style={{ marginRight: '5px' }}
-            />
-            Live
-          </label>
+      <Paper elevation={1} sx={{ p: 3, mb: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+          Time Range
+        </Typography>
+        <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center" useFlexGap>
+          <TextField
+            label="Start"
+            type="datetime-local"
+            value={startDatetime}
+            onChange={(e) => setStartDatetime(e.target.value)}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 220 }}
+          />
+          <TextField
+            label="End"
+            type="datetime-local"
+            value={endDatetime}
+            onChange={(e) => setEndDatetime(e.target.value)}
+            disabled={isLiveMode}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 220 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={isLiveMode}
+                onChange={(e) => setIsLiveMode(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Live Mode"
+          />
           {isLoading && (
-            <span style={{ color: '#666', fontStyle: 'italic' }}>Loading...</span>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CircularProgress size={20} />
+              <Typography variant="body2" color="text.secondary">
+                Loading...
+              </Typography>
+            </Box>
           )}
-        </div>
+        </Stack>
         {fetchError && (
-          <div style={{ color: 'red', marginTop: '10px' }}>
-            ⚠️ {fetchError}
-          </div>
+          <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+            {fetchError}
+          </Typography>
         )}
-      </div>
+      </Paper>
 
       {/* Data Series Selection Controls */}
-      <div style={{
-        padding: '15px',
-        backgroundColor: '#f9f9f9',
-        border: '1px solid #ddd',
-        borderRadius: '5px',
-        marginBottom: '15px'
-      }}>
-        <strong style={{ marginRight: '15px' }}>Measurement Type:</strong>
-        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={selectedSeries.includes('hr_non_session')}
-            onChange={() => toggleSeries('hr_non_session')}
-            style={{ marginRight: '5px' }}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, fontWeight: 500 }}>
+          Measurement Types
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSeries.includes('hr_non_session')}
+                onChange={() => toggleSeries('hr_non_session')}
+                icon={<FavoriteIcon sx={{ color: '#C2583E' }} />}
+                checkedIcon={<FavoriteIcon sx={{ color: '#C2583E' }} />}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#C2583E' }} />
+                <Typography variant="body2">Heart Rate (Non-Session)</Typography>
+              </Box>
+            }
           />
-          <span style={{ color: 'red' }}>●</span> Heart Rate (Non-Session)
-        </label>
-        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={selectedSeries.includes('hr_session')}
-            onChange={() => toggleSeries('hr_session')}
-            style={{ marginRight: '5px' }}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSeries.includes('hr_session')}
+                onChange={() => toggleSeries('hr_session')}
+                icon={<MonitorHeartIcon sx={{ color: '#E5A852' }} />}
+                checkedIcon={<MonitorHeartIcon sx={{ color: '#E5A852' }} />}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#E5A852' }} />
+                <Typography variant="body2">Heart Rate (Session)</Typography>
+              </Box>
+            }
           />
-          <span style={{ color: 'orange' }}>●</span> Heart Rate (Session)
-        </label>
-        <label style={{ marginRight: '15px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={selectedSeries.includes('hrv')}
-            onChange={() => toggleSeries('hrv')}
-            style={{ marginRight: '5px' }}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSeries.includes('hrv')}
+                onChange={() => toggleSeries('hrv')}
+                icon={<TimelineIcon sx={{ color: '#5B8A9F' }} />}
+                checkedIcon={<TimelineIcon sx={{ color: '#5B8A9F' }} />}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#5B8A9F' }} />
+                <Typography variant="body2">HRV</Typography>
+              </Box>
+            }
           />
-          <span style={{ color: 'blue' }}>●</span> HRV
-        </label>
-        <label style={{ cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={selectedSeries.includes('motion_count')}
-            onChange={() => toggleSeries('motion_count')}
-            style={{ marginRight: '5px' }}
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={selectedSeries.includes('motion_count')}
+                onChange={() => toggleSeries('motion_count')}
+                icon={<DirectionsRunIcon sx={{ color: '#7A9F6B' }} />}
+                checkedIcon={<DirectionsRunIcon sx={{ color: '#7A9F6B' }} />}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#7A9F6B' }} />
+                <Typography variant="body2">Motion Count</Typography>
+              </Box>
+            }
           />
-          <span style={{ color: 'green' }}>●</span> Motion Count
-        </label>
-      </div>
+        </Stack>
+      </Paper>
 
       {/* Plot */}
-      <Plot
-        data={plotData}
-        layout={{
-          width: 1200,
-          height: 600,
-          title: { text: 'Biosensor Data' },
-          xaxis: { title: 'Time (PST)' },
-          yaxis: { title: 'Value' },
-          showlegend: true,
-          legend: {
-            x: 1,
-            xanchor: 'right',
-            y: 1
-          }
-        }}
-      />
-    </div>
+      <Paper elevation={2} sx={{ p: 2 }}>
+        <Plot
+          data={plotData}
+          layout={{
+            autosize: true,
+            height: 600,
+            title: {
+              text: 'Biosensor Data',
+              font: { family: 'Roboto, Helvetica, Arial, sans-serif', size: 20, color: '#3E3E3E' }
+            },
+            xaxis: {
+              title: 'Time (PST)',
+              gridcolor: 'rgba(107, 142, 35, 0.1)',
+            },
+            yaxis: {
+              title: 'Value',
+              gridcolor: 'rgba(107, 142, 35, 0.1)',
+            },
+            showlegend: true,
+            legend: {
+              x: 1,
+              xanchor: 'right',
+              y: 1
+            },
+            paper_bgcolor: '#FFFFFF',
+            plot_bgcolor: '#FAFAF8',
+            font: { family: 'Roboto, Helvetica, Arial, sans-serif', color: '#3E3E3E' }
+          }}
+          useResizeHandler
+          style={{ width: '100%' }}
+        />
+      </Paper>
+    </Box>
   );
 };
 
