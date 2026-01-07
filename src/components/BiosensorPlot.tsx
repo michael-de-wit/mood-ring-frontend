@@ -236,12 +236,12 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
       {/* Datetime Range Controls */}
       <div style={{
         padding: '15px',
-        backgroundColor: '#e8f4f8',
-        border: '1px solid #b3d9e6',
+        backgroundColor: '#f9f9f9',
+        border: '1px solid #ddd',
         borderRadius: '5px',
         marginBottom: '10px'
       }}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'left', flexWrap: 'wrap' }}>
           <label>
             <strong>Start:</strong>
             <input
@@ -289,7 +289,7 @@ const BiosensorPlot: React.FC<BiosensorPlotProps> = ({ biosensorTimeSeries, isCo
         borderRadius: '5px',
         marginBottom: '15px'
       }}>
-        <strong style={{ marginRight: '15px' }}>Select Data to Display:</strong>
+        <strong style={{ marginRight: '15px' }}>Measurement Type:</strong>
         <label style={{ marginRight: '15px', cursor: 'pointer' }}>
           <input
             type="checkbox"
